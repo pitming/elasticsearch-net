@@ -1,43 +1,51 @@
 ﻿using System;
 using System.Collections.Generic;
-using Elasticsearch.Net.Connection;
 
-namespace Elasticsearch.Net.ConnectionPool
+namespace Elasticsearch.Net
 {
+	/// <summary>
+	/// A connection pool to a single node or endpoint
+	/// </summary>
 	public class SingleNodeConnectionPool : IConnectionPool
 	{
-		private readonly Uri _uri;
-		public int MaxRetries { get { return 0;  } }
+		/// <inheritdoc/>
+		public int MaxRetries => 0;
 
-		public bool AcceptsUpdates { get { return false; } }
+		/// <inheritdoc/>
+		public bool SupportsReseeding => false;
 
-		public SingleNodeConnectionPool(Uri uri)
+		/// <inheritdoc/>
+		public bool SupportsPinging => false;
+
+		/// <inheritdoc/>
+		public void Reseed(IEnumerable<Node> nodes) { } //ignored
+
+		/// <inheritdoc/>
+		public bool UsingSsl { get; }
+
+		/// <inheritdoc/>
+		public bool SniffedOnStartup { get => true; set {  } }
+
+		/// <inheritdoc/>
+		public IReadOnlyCollection<Node> Nodes { get; }
+
+		/// <inheritdoc/>
+		public DateTime LastUpdate { get; }
+
+		/// <inheritdoc/>
+		public SingleNodeConnectionPool(Uri uri, IDateTimeProvider dateTimeProvider = null)
 		{
-			//this makes sure that paths stay relative i.e if the root uri is:
-			//http://my-saas-provider.com/instance
-			if (!uri.OriginalString.EndsWith("/"))
-				uri = new Uri(uri.OriginalString + "/");
-			_uri = uri;
+			var node = new Node(uri);
+			this.UsingSsl = node.Uri.Scheme == "https";
+			this.Nodes = new List<Node> { node };
+			this.LastUpdate = (dateTimeProvider ?? DateTimeProvider.Default).Now();
 		}
 
-		public Uri GetNext(int? initialSeed, out int seed, out bool shouldPingHint)
-		{
-			seed = 0;
-			shouldPingHint = false;
-			return _uri;
-		}
+		/// <inheritdoc/>
+		public IEnumerable<Node> CreateView(Action<AuditEvent, Node> audit = null) => this.Nodes;
 
-		public void MarkDead(Uri uri, int? deadTimeout = null, int? maxDeadTimeout = null)
-		{
-		}
+		void IDisposable.Dispose() => this.DisposeManagedResources();
 
-		public void MarkAlive(Uri uri)
-		{
-		}
-
-		public void UpdateNodeList(IList<Uri> newClusterState, Uri sniffNode = null)
-		{
-		}
-
+		protected virtual void DisposeManagedResources() { }
 	}
 }

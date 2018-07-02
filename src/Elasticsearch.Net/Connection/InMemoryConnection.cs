@@ -1,72 +1,94 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
-using System.Net;
+using System.IO.Compression;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-using Elasticsearch.Net.Connection.Configuration;
 
-namespace Elasticsearch.Net.Connection
+namespace Elasticsearch.Net
 {
-	public class InMemoryConnection : HttpConnection
+	public class InMemoryConnection : IConnection
 	{
-		private byte[] _fixedResultBytes = Encoding.UTF8.GetBytes("{ \"USING NEST IN MEMORY CONNECTION\"  : null }");
-		private int _statusCode;
+		private readonly byte[] _responseBody;
+		private readonly int _statusCode;
+		private readonly Exception _exception;
+		private readonly string _contentType;
+		internal static readonly byte[] EmptyBody = Encoding.UTF8.GetBytes("");
 
-		public List<Tuple<string, Uri, byte[]>> Requests = new List<Tuple<string, Uri, byte[]>>(); 
-		
-		public bool RecordRequests { get; set;}
-
-		public InMemoryConnection() : base(new ConnectionConfiguration())
-		{
-			
-		}
-		public InMemoryConnection(IConnectionConfigurationValues settings) : base(settings)
+		/// <summary>
+		/// Every request will succeed with this overload, note that it won't actually return mocked responses
+		/// so using this overload might fail if you are using it to test high level bits that need to deserialize the response.
+		/// </summary>
+		public InMemoryConnection()
 		{
 			_statusCode = 200;
 		}
 
-		public InMemoryConnection(IConnectionConfigurationValues settings, string fixedResult, int statusCode = 200) : this(settings)
+		public InMemoryConnection(byte[] responseBody, int statusCode = 200, Exception exception = null, string contentType = RequestData.MimeType)
 		{
-			_fixedResultBytes = Encoding.UTF8.GetBytes(fixedResult);
+			_responseBody = responseBody;
 			_statusCode = statusCode;
-		}
-		
-		
-
-
-		protected override ElasticsearchResponse<Stream> DoSynchronousRequest(HttpWebRequest request, byte[] data = null, IRequestConfiguration requestSpecificConfig = null)
-		{
-			return this.ReturnConnectionStatus(request, data, requestSpecificConfig);
+			_exception = exception;
+			_contentType = contentType;
 		}
 
-		private ElasticsearchResponse<Stream> ReturnConnectionStatus(HttpWebRequest request, byte[] data, IRequestConfiguration requestSpecificConfig = null)
+		public virtual Task<TResponse> RequestAsync<TResponse>(RequestData requestData, CancellationToken cancellationToken)
+			where TResponse : class, IElasticsearchResponse, new() =>
+			this.ReturnConnectionStatusAsync<TResponse>(requestData, cancellationToken);
+
+		public virtual TResponse Request<TResponse>(RequestData requestData)
+			where TResponse : class, IElasticsearchResponse, new() =>
+			this.ReturnConnectionStatus<TResponse>(requestData);
+
+		protected TResponse ReturnConnectionStatus<TResponse>(RequestData requestData, byte[] responseBody = null, int? statusCode = null, string contentType = null)
+			where TResponse : class, IElasticsearchResponse, new()
 		{
-			var method = request.Method;
-			var path = request.RequestUri.ToString();
-
-			var cs = ElasticsearchResponse<Stream>.Create(this.ConnectionSettings, _statusCode, method, path, data);
-			cs.Response = new MemoryStream(_fixedResultBytes);
-			if (this.ConnectionSettings.ConnectionStatusHandler != null)
-				this.ConnectionSettings.ConnectionStatusHandler(cs);
-
-			if (this.RecordRequests)
+			var body = responseBody ?? _responseBody;
+			var data = requestData.PostData;
+			if (data != null)
 			{
-				this.Requests.Add(Tuple.Create(method, request.RequestUri, data));
+				using (var stream = requestData.MemoryStreamFactory.Create())
+				{
+					if (requestData.HttpCompression)
+						using (var zipStream = new GZipStream(stream, CompressionMode.Compress))
+							data.Write(zipStream, requestData.ConnectionSettings);
+					else
+						data.Write(stream, requestData.ConnectionSettings);
+				}
 			}
+			requestData.MadeItToResponse = true;
 
-			return cs;
+			var sc = statusCode ?? this._statusCode;
+			Stream s = (body != null) ? requestData.MemoryStreamFactory.Create(body) : requestData.MemoryStreamFactory.Create(EmptyBody);
+			return ResponseBuilder.ToResponse<TResponse>(requestData, _exception, sc, null, s, contentType ?? _contentType ?? RequestData.MimeType);
 		}
 
-		protected override Task<ElasticsearchResponse<Stream>> DoAsyncRequest(HttpWebRequest request, byte[] data = null, IRequestConfiguration requestSpecificConfig = null)
+		protected async Task<TResponse> ReturnConnectionStatusAsync<TResponse>(RequestData requestData, CancellationToken cancellationToken, byte[] responseBody = null, int? statusCode = null, string contentType = null)
+			where TResponse : class, IElasticsearchResponse, new()
 		{
-			return Task.Factory.StartNew(() =>
+			var body = responseBody ?? _responseBody;
+			var data = requestData.PostData;
+			if (data != null)
 			{
-				var cs = this.ReturnConnectionStatus(request, data, requestSpecificConfig);
-				return cs;
-			});
+				using (var stream = requestData.MemoryStreamFactory.Create())
+				{
+					if (requestData.HttpCompression)
+						using (var zipStream = new GZipStream(stream, CompressionMode.Compress))
+							await data.WriteAsync(zipStream, requestData.ConnectionSettings, cancellationToken).ConfigureAwait(false);
+					else
+						await data.WriteAsync(stream, requestData.ConnectionSettings, cancellationToken).ConfigureAwait(false);
+				}
+			}
+			requestData.MadeItToResponse = true;
+
+			var sc = statusCode ?? this._statusCode;
+			Stream s = (body != null) ? requestData.MemoryStreamFactory.Create(body) : requestData.MemoryStreamFactory.Create(EmptyBody);
+			return await ResponseBuilder.ToResponseAsync<TResponse>(requestData, _exception, sc, null, s, contentType ?? _contentType, cancellationToken)
+				.ConfigureAwait(false);
 		}
 
+		void IDisposable.Dispose() => DisposeManagedResources();
+
+		protected virtual void DisposeManagedResources() { }
 	}
 }

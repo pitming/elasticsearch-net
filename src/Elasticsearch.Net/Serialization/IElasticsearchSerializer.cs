@@ -1,21 +1,39 @@
 using System;
 using System.IO;
-using System.Linq;
+using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
-namespace Elasticsearch.Net.Serialization
+namespace Elasticsearch.Net
 {
 	public interface IElasticsearchSerializer
 	{
+		object Deserialize(Type type, Stream stream);
+
 		T Deserialize<T>(Stream stream);
 
-		Task<T> DeserializeAsync<T>(Stream stream);
+		Task<object> DeserializeAsync(Type type, Stream stream, CancellationToken cancellationToken = default(CancellationToken));
 
-		byte[] Serialize(object data, SerializationFormatting formatting = SerializationFormatting.Indented);
+		Task<T> DeserializeAsync<T>(Stream stream, CancellationToken cancellationToken = default(CancellationToken));
 
-		/// <summary>
-		/// Used to stringify valuetypes to string (i.e querystring parameters and route parameters).
-		/// </summary>
-		string Stringify(object valueType);
+		void Serialize<T>(T data, Stream stream, SerializationFormatting formatting = SerializationFormatting.Indented);
+
+		Task SerializeAsync<T>(T data, Stream stream, SerializationFormatting formatting = SerializationFormatting.Indented,
+			CancellationToken cancellationToken = default(CancellationToken));
+	}
+
+	public static class ElasticsearchSerializerExtensions
+	{
+
+		public static byte[] SerializeToBytes<T>(this IElasticsearchSerializer serializer, T data, SerializationFormatting formatting = SerializationFormatting.Indented)
+		{
+			using (var ms = new MemoryStream())
+			{
+				serializer.Serialize(data, ms, formatting);
+				return ms.ToArray();
+			}
+		}
+		public static string SerializeToString<T>(this IElasticsearchSerializer serializer, T data, SerializationFormatting formatting = SerializationFormatting.Indented) =>
+			serializer.SerializeToBytes(data, formatting).Utf8String();
 	}
 }
