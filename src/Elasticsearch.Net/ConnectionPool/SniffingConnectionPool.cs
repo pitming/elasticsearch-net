@@ -2,35 +2,63 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using Elasticsearch.Net.Connection;
-using Elasticsearch.Net.Providers;
 
-namespace Elasticsearch.Net.ConnectionPool
+namespace Elasticsearch.Net
 {
 	public class SniffingConnectionPool : StaticConnectionPool
 	{
 		private readonly ReaderWriterLockSlim _readerWriter = new ReaderWriterLockSlim();
 
-		public override bool AcceptsUpdates { get { return true; } }
+		/// <inheritdoc/>
+		public override bool SupportsReseeding => true;
 
-		public SniffingConnectionPool(
-			IEnumerable<Uri> uris, 
-			bool randomizeOnStartup = true, 
-			IDateTimeProvider dateTimeProvider = null)
-			: base(uris, randomizeOnStartup, dateTimeProvider)
+		/// <inheritdoc/>
+		public override bool SupportsPinging => true;
+
+		public SniffingConnectionPool(IEnumerable<Uri> uris, bool randomize = true, IDateTimeProvider dateTimeProvider = null)
+			: base(uris, randomize, dateTimeProvider)
+		{ }
+
+		public SniffingConnectionPool(IEnumerable<Node> nodes, bool randomize = true, IDateTimeProvider dateTimeProvider = null)
+			: base(nodes, randomize, dateTimeProvider) { }
+
+		public SniffingConnectionPool(IEnumerable<Node> nodes, Func<Node, float> nodeScorer, IDateTimeProvider dateTimeProvider = null)
+			: base(nodes, nodeScorer, dateTimeProvider) { }
+
+		/// <inheritdoc/>
+		public override IReadOnlyCollection<Node> Nodes
 		{
+			get
+			{
+				try
+				{
+					//since internalnodes can be changed after returning we return
+					//a completely new list of cloned nodes
+					this._readerWriter.EnterReadLock();
+					return this.InternalNodes.Select(n => n.Clone()).ToList();
+				}
+				finally
+				{
+					this._readerWriter.ExitReadLock();
+				}
+			}
 		}
 
-		public override void UpdateNodeList(IList<Uri> newClusterState, Uri sniffNode = null)
+		/// <inheritdoc/>
+		public override void Reseed(IEnumerable<Node> nodes)
 		{
+			if (!nodes.HasAny()) return;
+
 			try
 			{
 				this._readerWriter.EnterWriteLock();
-				this.NodeUris = newClusterState;
-				this.UriLookup = newClusterState.ToDictionary(k => k, v => new EndpointState()
-				{
-					Attemps = v.Equals(sniffNode) ? 1 : 0
-				});
+				var sortedNodes = this.SortNodes(nodes)
+					.DistinctBy(n => n.Uri)
+					.ToList();
+
+				this.InternalNodes = sortedNodes;
+				this.GlobalCursor = -1;
+				this.LastUpdate = this.DateTimeProvider.Now();
 			}
 			finally
 			{
@@ -38,12 +66,13 @@ namespace Elasticsearch.Net.ConnectionPool
 			}
 		}
 
-		public override Uri GetNext(int? initialSeed, out int seed, out bool shouldPingHint)
+		/// <inheritdoc/>
+		public override IEnumerable<Node> CreateView(Action<AuditEvent, Node> audit = null)
 		{
+			this._readerWriter.EnterReadLock();
 			try
 			{
-				this._readerWriter.EnterReadLock();
-				return base.GetNext(initialSeed, out seed, out shouldPingHint);
+				return base.CreateView(audit);
 			}
 			finally
 			{
@@ -51,33 +80,10 @@ namespace Elasticsearch.Net.ConnectionPool
 			}
 		}
 
-		public override void MarkAlive(Uri uri)
+		protected override void DisposeManagedResources()
 		{
-			try
-			{
-				this._readerWriter.EnterReadLock();
-				base.MarkAlive(uri);
-			}
-			finally
-			{
-				this._readerWriter.ExitReadLock();
-				
-			}
+			this._readerWriter?.Dispose();
+			base.DisposeManagedResources();
 		}
-
-		public override void MarkDead(Uri uri, int? deadTimeout, int? maxDeadTimeout)
-		{
-			try
-			{
-				this._readerWriter.EnterReadLock();
-				base.MarkDead(uri, deadTimeout, maxDeadTimeout);
-			}
-			finally
-			{
-				this._readerWriter.ExitReadLock();
-				
-			}
-		}
-
 	}
 }

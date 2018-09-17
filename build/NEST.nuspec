@@ -1,26 +1,35 @@
-<?xml version="1.0"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
-  <metadata>
-    <id>NEST</id>
-    <version>1.3.1</version>
-    <title>NEST - Elasticsearch Client</title>
-    <authors>Elasticsearch Inc. and contributors</authors>
-    <owners>Elasticsearch Inc.</owners>
-    <iconUrl>http://nest.azurewebsites.net/images/nest-nuget-icon.png</iconUrl>
-    <licenseUrl>https://github.com/elasticsearch/elasticsearch-net/blob/master/license.txt</licenseUrl>
-    <projectUrl>https://github.com/elasticsearch/elasticsearch-net</projectUrl>
-    <summary>Strongly typed interface to Elasticsearch. Fluent request builder, mapped responses and powerful query dsl. Uses and exposes Elasticsearch.Net</summary>
-    <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>Elasticsearch client, strongly typed interface to Elasticsearch. Fluent request builder, mapped responses and powerful query dsl. Uses and exposes Elasticsearch.Net</description>
-    <dependencies>
-      <dependency id="Elasticsearch.Net" version="1.3.1"/>
-      <dependency id="Newtonsoft.Json" version="6.0.1" />
-    </dependencies>
-    <tags>elasticsearch elastic search lucene nest</tags>
-  </metadata>
-  <files>
-    <file src="output\Nest\Nest.dll" target="lib"/> 
-    <file src="output\Nest\Nest.pdb" target="lib"/> 
-    <file src="output\Nest\Nest.XML" target="lib"/> 
-  </files>
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+	<metadata>
+		<id>NEST</id>
+		<version>$version$</version>
+		<title>NEST - Elasticsearch .NET high level client</title>
+		<authors>Elastic and contributors</authors>
+		<owners>Elastic</owners>
+		<licenseUrl>https://github.com/elastic/elasticsearch-net/blob/master/license.txt</licenseUrl>
+		<projectUrl>https://github.com/elastic/elasticsearch-net</projectUrl>
+		<iconUrl>https://raw.githubusercontent.com/elastic/elasticsearch-net/master/build/nuget-icon.png</iconUrl>
+		<requireLicenseAcceptance>false</requireLicenseAcceptance>
+		<description>Strongly typed interface to Elasticsearch. Fluent and classic object initializer mappings of requests and responses. Uses and exposes Elasticsearch.Net</description>
+		<summary>Strongly typed interface to Elasticsearch. Fluent and classic object initializer mappings of requests and responses. Uses and exposes Elasticsearch.Net</summary>
+		<releaseNotes>See https://github.com/elastic/elasticsearch-net/releases/tag/$version$</releaseNotes>
+		<copyright>2014-$year$ Elasticsearch BV</copyright>
+		<tags>elasticsearch,elastic,search,lucene,nest</tags>
+		<dependencies>
+			<group targetFramework=".NETStandard2.0">
+				<dependency id="Elasticsearch.Net" version="[$version$, $nextMajorVersion$)" />
+				<!--<dependency id="System.Collections.Specialized" version="[4.3.0, )" />-->
+				<!--<dependency id="System.Reflection.TypeExtensions" version="[4.3.0, )" />-->
+				<!--<dependency id="System.Linq.Queryable" version="[4.0.1, )" />-->
+
+				<!-- since we no longer reference JSON.NET (internalized) we do need to ship with its System references -->
+				<dependency id="System.ComponentModel.TypeConverter" version="[4.3.0, )"/>
+				<dependency id="System.Runtime.Serialization.Primitives" version="[4.3.0, )"/>
+			</group>
+		</dependencies>
+	</metadata>
+	<files>
+		<file src="output\Nest\netstandard2.0\Nest.dll" target="lib\netstandard2.0"/>
+		<file src="output\Nest\netstandard2.0\Nest.xml" target="lib\netstandard2.0"/>
+	</files>
 </package>

@@ -1,0 +1,16 @@
+source https://www.nuget.org/api/v2
+
+group build
+
+    source https://www.nuget.org/api/v2
+
+    nuget FAKE prerelease
+    nuget ILRepack prerelease
+    nuget FSharp.Data 
+    nuget Newtonsoft.Json
+    nuget Mono.Cecil prerelease
+
+    # persisting profiling results
+    nuget Nest framework: net46
+	
+	nuget Octokit
